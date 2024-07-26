@@ -12,32 +12,28 @@ def preformat_cjk(string, width, align='<', fill=' '):
     }[align](string)
 
 # 데이터 가져오기
-url = 'https://sports.news.naver.com/kbaseball/record/index.nhn?category=kbo&amp;year=2017'  # 실제 데이터 소스 URL로 수정 필요
+url = 'https://sports.news.naver.com/kbaseball/record/index.nhn?category=kbo&year=2024'  # 실제 데이터 소스 URL로 수정 필요
 baseballData = urllib.request.urlopen(url)
 source = baseballData.read()
 baseballData.close()
 
 # HTML 파싱
 soup = BeautifulSoup(source, 'html.parser')
-soup = soup.find_all('script')
+scripts = soup.find_all('script')
 
 # JSON 데이터 찾기
 recordJsonData = None
-for script in soup:
+for script in scripts:
     line = str(script)
     if 'var ' in line and 'jsonTeamRecord' in line:
         recordList = line.split('jsonTeamRecord = ')
-
-        for record in recordList:
-            if record.startswith('{'):
-                recordLine = record.splitlines()
-                for finalLine in recordLine:
-                    if finalLine.endswith('}]};'):
-                        recordJsonData = finalLine
+        if len(recordList) > 1:
+            record = recordList[1].split('};')[0] + '}'
+            recordJsonData = record.strip()
 
 # JSON 파싱
 if recordJsonData:
-    r = json.loads(recordJsonData[:-1])
+    r = json.loads(recordJsonData)
     regularTeamRecordList = r['regularTeamRecordList']
 
     # HTML 테이블 생성
@@ -46,9 +42,11 @@ if recordJsonData:
         <tr>
             <th>순위</th>
             <th>팀명</th>
+            <th>경기수</th>
             <th>승</th>
             <th>패</th>
             <th>무</th>
+            <th>승률</th>
             <th>게임차</th>
             <th>최근 10경기</th>
         </tr>
@@ -56,17 +54,18 @@ if recordJsonData:
 
     order = 0
     for team in regularTeamRecordList:
-        t = json.loads(str(team).replace("'", '"'))
         order += 1
-        tn = preformat_cjk(t['teamName'], 10)
-        won = t['won']
-        lost = t['lost']
-        drawn = t['drawn']
-        winDiff = t['winDiff']
-        recentResult = t['recentResult']
+        tn = preformat_cjk(team['teamName'], 10)
+        gameCount = team['gameCount']
+        won = team['won']
+        lost = team['lost']
+        drawn = team['drawn']
+        wra = format(float(team['wra']), '.3f')  # Format winning percentage to 3 decimal places
+        winDiff = team['winDiff']
+        recentResult = team['recentResult']
 
         # 팀명이 '두산'인지 확인하고 스타일 변경
-        row_class = 'blue-row' if '두산' in t['teamName'] else ''
+        row_class = 'blue-row' if '두산' in team['teamName'] else ''
         
         html_output += '''
         <tr class="{}">
@@ -77,13 +76,15 @@ if recordJsonData:
             <td>{}</td>
             <td>{}</td>
             <td>{}</td>
+            <td>{}</td>
+            <td>{}</td>
         </tr>
-        '''.format(row_class, order, tn, won, lost, drawn, winDiff, recentResult)
+        '''.format(row_class, order, tn, gameCount, won, lost, drawn, wra, winDiff, recentResult)
 
     html_output += '</table>'
     
     # HTML 파일로 저장
-    with open('baseball_records.html', 'w', encoding='utf-8') as f:
+    with open('./rank/baseball_records.html', 'w', encoding='utf-8') as f:
         f.write('''
         <!DOCTYPE html>
         <html lang="ko">
